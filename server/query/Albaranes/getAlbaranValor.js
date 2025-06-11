@@ -3,7 +3,7 @@ import conexion from "../../conexion.js";
 
 const router = express.Router();
 
-router.get("/:id", async (req, res) => {
+router.post("", async (req, res) => {
   const { id } = req.body;
 
   try {
