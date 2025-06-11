@@ -4,7 +4,7 @@ import conexion from "../../conexion.js";
 const router = express.Router();
 
 router.get("/:id", async (req, res) => {
-  const { id } = req.params;
+  const { id } = req.body;
 
   try {
     // Consulta para obtener los datos del cliente asociado al albarán
