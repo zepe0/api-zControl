@@ -22,6 +22,7 @@ router.put("", async (req, res) => {
   } catch (error) {
     console.error("Error al ejecutar la consulta:", error);
     res.status(500).json({ error: "Error al actualizar la pintura" });
+    
   }
 });
 

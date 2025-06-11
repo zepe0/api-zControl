@@ -10,7 +10,8 @@ router.get("", async (req, res) => {
     const [resultado] = await conexion.query(query);
     if (resultado.length > 0) {
       res.status(200).json(resultado);
-    } else {
+    } 
+    else {
       res.status(404).json({ error: "No se encontraron pinturas" });
     }
   } catch (error) {

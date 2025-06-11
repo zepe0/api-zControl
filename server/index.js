@@ -3,7 +3,6 @@ import cors from "cors";
 import dotenv from "dotenv";
 dotenv.config({ path: "../../.env" });
 
-
 import { createServer } from "http";
 import { Server } from "socket.io";
 
@@ -21,7 +20,7 @@ import newAlbaran from "./query/Albaranes/newAlbaran.js";
 import getAlbaran from "./query/Albaranes/getAlbaran.js";
 import editPintura from "./query/Pintura/editPintura.js";
 import editMaterial from "./query/Material/editMaterial.js";
-
+import getAlbaranValor from "./query/Albaranes/getAlbaranValor.js"
 const app = express();
 const PORT = process.env.PORT || 3001;
 const API = process.env.API || "localhost";
@@ -44,6 +43,7 @@ app.use("/api/productos", productosRouter);
 app.use("/api/albaranes", getAlbaranes);
 app.use("/api/albaran", newAlbaran(io));
 app.use("/api/albaran", getAlbaran);
+app.use("/api/albaranvalor", getAlbaranValor);
 app.use("/api/albaranes", editAlbaran(io));
 
 app.use("/api/materiales", addMaterial(io));
@@ -61,14 +61,11 @@ app.use("/api/pintura/edit", editPintura);
 io.on("connection", (socket) => {
   console.log(`Cliente conectado: ${socket.id}`);
 
-  
   socket.on("nuevoAlbaran", (data) => {
-  
     io.emit("actualizarAlbaranes", data);
   });
 
   socket.on("modificarProducto", (data) => {
- 
     io.emit("actualizarProductos", data);
   });
 
