@@ -22,7 +22,7 @@ router.get("/:id", async (req, res) => {
     // Consulta para obtener los productos asociados al albarán
     const queryProductos = `
       SELECT am.idALbaran, am.idMaterial, am.cantidad,am.ral, am.observaciones,
-             p.nombre AS nombreMaterial,  p.refObra
+             p.nombre AS nombreMaterial,  p.refObra, p.precio
       FROM AlbaranMateriales am
       JOIN productos p ON am.idMaterial = p.id
       WHERE am.idALbaran = ?
