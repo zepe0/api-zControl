@@ -11,7 +11,7 @@ const addEStanteria = (io) => {
     const { id, numAlturas, numEstantes, matriz } = req.body;
     try {
       const [resultado] = await conexion.query(query, [
-        id,
+     
         id,
         numAlturas,
         numEstantes,
