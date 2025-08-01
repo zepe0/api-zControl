@@ -22,6 +22,7 @@ import editPintura from "./query/Pintura/editPintura.js";
 import editMaterial from "./query/Material/editMaterial.js";
 import getAlbaranValor from "./query/Albaranes/getAlbaranValor.js"
 import addEStanteria from "./query/Estanteria/addEstanteria.js";
+import getEStanteria from "./query/Estanteria/getEstanteria.js";
 const app = express();
 const PORT = process.env.PORT || 3001;
 const API = process.env.API || "localhost";
