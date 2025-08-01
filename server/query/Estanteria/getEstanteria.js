@@ -5,7 +5,7 @@ import conexion from "../../conexion.js";
 const router = express.Router();
 
 // Endpoint para obtener los pinturas
-router.get("", async (req, res) => {
+router.get("/", async (req, res) => {
   const query = "SELECT * FROM estanteria";
   try {
     const [resultados] = await conexion.query(query);
