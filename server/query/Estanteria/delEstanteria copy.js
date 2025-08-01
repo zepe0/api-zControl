@@ -5,7 +5,7 @@ import conexion from "../../conexion.js";
 const router = express.Router();
 
 const delEStanteria = (io) => {
-  router.post("/", async (req, res) => {
+  router.delete("/", async (req, res) => {
     const query = "DELETE FROM estanteria WHERE id = ?";
     const { id } = req.body;
 
