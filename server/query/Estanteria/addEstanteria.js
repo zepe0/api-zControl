@@ -20,7 +20,7 @@ const addEStanteria = (io) => {
       ]);
 
       if (resultado.affectedRows > 0) {
-        io.emit("materialAñadido", { id, numAlturas, numEstantes, obra });
+        io.emit("materialAñadido", { id, numAlturas, numEstantes, matriz });
         res.status(200).json({ message: "Material añadido correctamente" });
       }
       res.status(400).json({ error: "No se pudo añadir el material" });
