@@ -23,6 +23,7 @@ import editMaterial from "./query/Material/editMaterial.js";
 import getAlbaranValor from "./query/Albaranes/getAlbaranValor.js";
 import addEStanteria from "./query/Estanteria/addEstanteria.js";
 import getEstanteria from "./query/Estanteria/getEstanteria.js";
+import delEStanteria from "./query/Estanteria/delEstanteria copy.js";
 const app = express();
 const PORT = process.env.PORT || 3001;
 const API = process.env.API || "localhost";
@@ -60,6 +61,7 @@ app.use("/", getPinturas);
 app.use("/api/pintura/edit", editPintura);
 
 app.use("/api/estanterias/add", addEStanteria(io));
+app.use("/api/estanterias/delete", delEStanteria(io));
 app.use("/api/estanterias/", getEstanteria);
 
 // Configurar los eventos de Socket.IO
