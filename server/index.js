@@ -20,7 +20,7 @@ import newAlbaran from "./query/Albaranes/newAlbaran.js";
 import getAlbaran from "./query/Albaranes/getAlbaran.js";
 import editPintura from "./query/Pintura/editPintura.js";
 import editMaterial from "./query/Material/editMaterial.js";
-import getAlbaranValor from "./query/Albaranes/getAlbaranValor.js"
+import getAlbaranValor from "./query/Albaranes/getAlbaranValor.js";
 import addEStanteria from "./query/Estanteria/addEstanteria.js";
 import getEstanteria from "./query/Estanteria/getEstanteria.js";
 const app = express();

@@ -5,8 +5,7 @@ import { randomUUID } from "crypto";
 const router = express.Router();
 
 const addEStanteria = (io) => {
-  router.post("/add", async (req, res) => {
-  
+  router.post("/", async (req, res) => {
     const query =
       "INSERT INTO estanteria (id,numAlturas, numEstantes,matriz) VALUES (?,?, ?, ?, )";
     const { id, numAlturas, numEstantes, matriz } = req.body;
@@ -16,7 +15,7 @@ const addEStanteria = (io) => {
         id,
         numAlturas,
         numEstantes,
-        matriz 
+        matriz,
       ]);
 
       if (resultado.affectedRows > 0) {
