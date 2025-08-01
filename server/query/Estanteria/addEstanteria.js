@@ -9,13 +9,14 @@ const addEStanteria = (io) => {
     const query =
       "INSERT INTO estanteria (id,numAlturas, numEstantes,matriz) VALUES (?,?, ?, ?)";
     const { id, numAlturas, numEstantes, matriz } = req.body;
+    const matrizJSON = JSON.stringify(matriz);
     try {
       const [resultado] = await conexion.query(query, [
      
         id,
         numAlturas,
         numEstantes,
-        matriz,
+        matrizJSON,
       ]);
 
       if (resultado.affectedRows > 0) {
