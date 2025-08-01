@@ -7,7 +7,7 @@ const router = express.Router();
 const addEStanteria = (io) => {
   router.post("/", async (req, res) => {
     const query =
-      "INSERT INTO estanteria (id,numAlturas, numEstantes,matriz) VALUES (?,?, ?, ?, )";
+      "INSERT INTO estanteria (id,numAlturas, numEstantes,matriz) VALUES (?,?, ?, ?)";
     const { id, numAlturas, numEstantes, matriz } = req.body;
     try {
       const [resultado] = await conexion.query(query, [
