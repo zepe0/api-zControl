@@ -43,7 +43,7 @@ const io = new Server(httpServer, {
 });
 
 //Rutas para las Horas
-app.use("api/",usersHoras)
+app.use("api",usersHoras)
 
 
 
