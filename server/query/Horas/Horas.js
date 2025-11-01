@@ -10,7 +10,7 @@ router.post("/loginHoras", async (req, res) => {
     return res.status(400).json({ error: "Falta el nombre de usuario" });
   }
 
-  const query = "SELECT * FROM GP_Horas ";
+  const query = "SELECT * FROM GP_UsuariosHoras ";
 
   try {
     const [resultados] = await conexion.query(query, [username]);
