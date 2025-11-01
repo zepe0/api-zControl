@@ -3,37 +3,62 @@ import conexion from "../../conexion.js";
 
 const router = express.Router();
 
-router.post("/loginHoras", async (req, res) => {
-  const { username, password } = req.body;
+/**
+ * 📌 GET /api/horas
+ * Devuelve todas las horas registradas o las de un usuario específico si se pasa ?user_id=...
+ */
+router.get("/", async (req, res) => {
+  const { user_id } = req.query; // opcional, si quieres filtrar por usuario
 
-  if (!username) {
-    return res.status(400).json({ error: "Falta el nombre de usuario" });
+  let query = `
+    SELECT h.id, h.user_id, u.username, h.cliente, h.referencia, h.tipo, h.horas, h.fecha
+    FROM GP_Horas h
+    JOIN GP_UsuariosHoras u ON u.id = h.user_id
+  `;
+  const params = [];
+
+  if (user_id) {
+    query += " WHERE h.user_id = ?";
+    params.push(user_id);
   }
 
-  const query = "SELECT * FROM GP_UsuarioHoras WHERE Usuario = ?";
+  query += " ORDER BY h.fecha DESC";
 
   try {
-    const [resultados] = await conexion.query(query, [username]);
+    const [rows] = await conexion.query(query, params);
+    res.status(200).json(rows);
+  } catch (error) {
+    console.error("❌ Error al obtener las horas:", error);
+    res.status(500).json({ error: "Error al obtener las horas" });
+  }
+});
 
-    if (resultados.length === 0) {
-      return res.status(401).json({ error: "Usuario no encontrado" });
-    }
+/**
+ * 📌 POST /api/horas
+ * Añade una nueva entrada de horas
+ */
+router.post("/", async (req, res) => {
+  const { user_id, cliente, referencia, tipo, horas } = req.body;
 
-    const user = resultados[0];
+  // Validaciones básicas
+  if (!user_id || !horas) {
+    return res.status(400).json({ error: "Faltan datos obligatorios (user_id, horas)" });
+  }
 
-    // Si tienes campo Password en la tabla, puedes comprobarlo:
-    if (password && user.password && user.password !== password) {
-      return res.status(401).json({ error: "Contraseña incorrecta" });
-    }
+  const query = `
+    INSERT INTO GP_Horas (user_id, cliente, referencia, tipo, horas)
+    VALUES (?, ?, ?, ?, ?)
+  `;
 
-    // Devuelve solo lo necesario
-    res.status(200).json({
-      id: user.id,
-     
+  try {
+    const [result] = await conexion.query(query, [user_id, cliente, referencia, tipo, horas]);
+    res.status(201).json({
+      message: "Horas registradas correctamente",
+      id: result.insertId,
     });
   } catch (error) {
-    console.error("Error al ejecutar la consulta:", error);
-    res.status(500).json({ error: "Error en el servidor al validar el usuario" });
+    console.error("❌ Error al insertar horas:", error);
+    res.status(500).json({ error: "Error al registrar las horas" });
   }
 });
 
