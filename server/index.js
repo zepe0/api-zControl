@@ -44,7 +44,7 @@ const io = new Server(httpServer, {
 });
 
 //Rutas para las Horas
-app.use("api/horas",usersHoras)
+app.use("/api/horas",usersHoras)
 app.use("/api/", LoginHoras);
 
 
