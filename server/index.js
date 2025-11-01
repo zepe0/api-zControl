@@ -25,7 +25,7 @@ import addEStanteria from "./query/Estanteria/addEstanteria.js";
 import getEstanteria from "./query/Estanteria/getEstanteria.js";
 import delEStanteria from "./query/Estanteria/delEstanteria copy.js";
 import usersHoras from "./query/Usuarios/usershoras.js";
-import horasRouter from "./query/Horas/Horas.js";
+import LoginHoras from "./query/Horas/Horas.js";
 const app = express();
 const PORT = process.env.PORT || 3001;
 const API = process.env.API || "localhost";
@@ -44,8 +44,8 @@ const io = new Server(httpServer, {
 });
 
 //Rutas para las Horas
-app.use("api",usersHoras)
-app.use("/api/horas", horasRouter);
+app.use("api/horas",usersHoras)
+app.use("/api/", LoginHoras);
 
 
 
