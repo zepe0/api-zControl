@@ -24,6 +24,7 @@ import getAlbaranValor from "./query/Albaranes/getAlbaranValor.js";
 import addEStanteria from "./query/Estanteria/addEstanteria.js";
 import getEstanteria from "./query/Estanteria/getEstanteria.js";
 import delEStanteria from "./query/Estanteria/delEstanteria copy.js";
+import usersHoras from "./query/Usuarios/usershoras.js";
 const app = express();
 const PORT = process.env.PORT || 3001;
 const API = process.env.API || "localhost";
@@ -40,6 +41,11 @@ const io = new Server(httpServer, {
     origin: "*",
   },
 });
+
+//Rutas para las Horas
+app.use("api/",usersHoras)
+
+
 
 // Usar las rutas de productos
 app.use("/api/productos", productosRouter);
