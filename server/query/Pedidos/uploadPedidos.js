@@ -134,7 +134,7 @@ export default function uploadPedidos(io) {
     // Buscar materiales (referencias, cantidades, descripciones)
     // Patrón: código/referencia - descripción - cantidad - unidad
     const materialMatches = text.matchAll(
-      /([A-Z0-9]+)\s*[-–]\s*([^-\n]+?)\s*[-–]\s*(\d+(?:[.,]\d+)?)\s*(kg|l|ud|unidades?|litro|kilo|m3|m2|ral)/i,
+      /([A-Z0-9]+)\s*[-–]\s*([^-\n]+?)\s*[-–]\s*(\d+(?:[.,]\d+)?)\s*(kg|l|ud|unidades?|litro|kilo|m3|m2|ral)/gi,
     );
     for (const match of materialMatches) {
       data.materiales.push({
