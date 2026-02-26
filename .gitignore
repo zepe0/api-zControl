@@ -12,6 +12,15 @@ dist
 dist-ssr
 *.local
 
+# Archivos especiales Windows
+nul
+CON
+PRN
+AUX
+NUL
+COM1
+COM2
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

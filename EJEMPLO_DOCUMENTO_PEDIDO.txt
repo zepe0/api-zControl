@@ -1,0 +1,37 @@
+ALBARÁN DE ENTREGA
+
+Número de Albarán: ALB-2026-0127
+Fecha: 26/02/2026
+Hora: 10:30 AM
+
+═══════════════════════════════════════════════════════════════
+
+CLIENTE:
+
+Empresa XYZ S.L.
+NIF: 12345678A
+Teléfono: +34 912 34 56 78
+Dirección: Calle Principal 123, 28001 Madrid, España
+Contacto: Juan García López
+
+═══════════════════════════════════════════════════════════════
+
+MATERIALES ENTREGADOS:
+
+Ref: REF-001 - Pintura Blanca Premium - 50 kg
+Ref: REF-002 - Pintura Roja Industrial - 25 kg
+Ref: REF-003 - Diluyente Acrílico - 10 l
+Ref: REF-004 - Barniz Transparente - 5 l
+
+═══════════════════════════════════════════════════════════════
+
+OBSERVACIONES:
+
+Entrega urgente, productos verificados y en buen estado.
+Cliente conforme con los materiales recibidos.
+
+═══════════════════════════════════════════════════════════════
+
+Firma del cliente: _____________________  Fecha: __/__/____
+
+Entregado por: [Nombre del repartidor]
