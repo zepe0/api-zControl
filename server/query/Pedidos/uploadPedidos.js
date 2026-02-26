@@ -8,7 +8,11 @@ import { createRequire } from "module";
 import conexion from "../../conexion.js";
 
 const require = createRequire(import.meta.url);
-const pdfParse = require("pdf-parse");
+const pdfParseModule = require("pdf-parse");
+const pdfParse =
+  pdfParseModule && typeof pdfParseModule === "object" && pdfParseModule.default
+    ? pdfParseModule.default
+    : pdfParseModule;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
