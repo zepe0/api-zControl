@@ -1,0 +1,119 @@
+TODO CAMBIAR FRONT - Migración nueva BD (Albaranes)
+Fecha: 2026-03-07
+
+1) ENDPOINT: GET /api/albaranes
+Archivo backend: server/query/Albaranes/getAlbaranes.js
+Cambios backend:
+- Ahora consulta columnas nuevas: cliente_id y pedido_id.
+- Mantiene compatibilidad temporal devolviendo alias:
+  - nCliente = cliente_id
+  - idPedido = pedido_id
+Qué debe cambiar en front:
+- Dejar de depender de nCliente e idPedido.
+- Usar cliente_id y pedido_id como campos oficiales.
+SQL necesario:
+- Tabla Albaranes debe tener columnas:
+  - cliente_id VARCHAR(255) NULL
+  - pedido_id VARCHAR(32) NULL
+
+2) ENDPOINT: POST /api/albaran/add
+Archivo backend: server/query/Albaranes/newAlbaran.js
+Cambios backend:
+- Inserta en Albaranes con columnas nuevas:
+  INSERT INTO Albaranes (id, cliente_id, proceso, pedido_id)
+- Ya no guarda nombre cliente directo en Albaranes.
+- Busca/crea cliente en tabla cliente y usa su id (cliente.id) para cliente_id.
+Qué debe cambiar en front:
+- Si front mostraba cliente desde nCliente, ahora debe tomarlo desde la info del cliente (join) o consultar cliente por cliente_id.
+- pedido_id sigue llegando con el número del albarán (numAlbaran) por compatibilidad actual.
+SQL necesario:
+- Relación lógica: Albaranes.cliente_id -> cliente.id
+- (Recomendado) Crear índice a cliente_id para joins rápidos.
+
+3) ENDPOINT: GET /api/albaran/:id
+Archivo backend: server/query/Albaranes/getAlbaran.js
+Cambios backend:
+- Join actualizado a nueva estructura:
+  JOIN cliente c ON a.cliente_id = c.id
+- Se añaden en respuesta cliente:
+  - cliente_id
+  - pedido_id
+  - idAlbaran
+Qué debe cambiar en front:
+- No asumir join por nombre de cliente.
+- Consumir cliente_id/pedido_id desde la respuesta.
+SQL necesario:
+- Albaranes.cliente_id debe existir y contener ids válidos de cliente.id.
+
+4) ENDPOINT: POST /api/albaranvalor
+Archivo backend: server/query/Albaranes/getAlbaranValor.js
+Cambios backend:
+- Join actualizado a nueva estructura:
+  JOIN cliente c ON a.cliente_id = c.id
+- Se añaden en respuesta cliente:
+  - cliente_id
+  - pedido_id
+  - idAlbaran
+Qué debe cambiar en front:
+- Igual que en /api/albaran/:id: leer cliente_id/pedido_id y no depender de nombre.
+SQL necesario:
+- Albaranes.cliente_id debe existir y estar poblado.
+
+5) ENDPOINT: POST /api/pedidos/upload
+Archivo backend: server/query/Pedidos/uploadPedidos.js
+Estado:
+- El bloque de persistencia SQL está comentado actualmente.
+- Dentro del bloque comentado todavía aparece INSERT con columnas antiguas (nCliente, idPedido).
+Qué debe cambiar:
+- Si se reactiva la persistencia, migrar ese INSERT a (cliente_id, pedido_id) igual que newAlbaran.
+SQL necesario:
+- Mismo requisito: columnas nuevas en Albaranes y relación por cliente.id.
+
+---------------------------------------------
+SQL BASE DE MIGRACIÓN (idempotente)
+---------------------------------------------
+SET @db = DATABASE();
+
+-- cliente_id
+SET @sql_cliente :=
+(
+  SELECT IF(
+    EXISTS(
+      SELECT 1
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = @db
+        AND TABLE_NAME = 'Albaranes'
+        AND COLUMN_NAME = 'cliente_id'
+    ),
+    'SELECT "cliente_id ya existe" AS info;',
+    'ALTER TABLE `Albaranes` ADD COLUMN `cliente_id` VARCHAR(255) NULL AFTER `fecha`;' 
+  )
+);
+PREPARE stmt FROM @sql_cliente;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- pedido_id
+SET @sql_pedido :=
+(
+  SELECT IF(
+    EXISTS(
+      SELECT 1
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = @db
+        AND TABLE_NAME = 'Albaranes'
+        AND COLUMN_NAME = 'pedido_id'
+    ),
+    'SELECT "pedido_id ya existe" AS info;',
+    'ALTER TABLE `Albaranes` ADD COLUMN `pedido_id` VARCHAR(32) NULL AFTER `proceso`;' 
+  )
+);
+PREPARE stmt2 FROM @sql_pedido;
+EXECUTE stmt2;
+DEALLOCATE PREPARE stmt2;
+
+---------------------------------------------
+NOTAS DE DATOS EXISTENTES
+---------------------------------------------
+- Si existen registros antiguos en Albaranes sin cliente_id, los endpoints con join por id no encontrarán cliente.
+- Recomendado: script de backfill para completar cliente_id en históricos antes de mover todo el front.

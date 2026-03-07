@@ -8,11 +8,6 @@ import { createRequire } from "module";
 import conexion from "../../conexion.js";
 
 const require = createRequire(import.meta.url);
-const pdfParseModule = require("pdf-parse");
-const pdfParse =
-  pdfParseModule && typeof pdfParseModule === "object" && pdfParseModule.default
-    ? pdfParseModule.default
-    : pdfParseModule;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -72,8 +67,19 @@ export default function uploadPedidos(io) {
   async function extractTextFromPDF(filePath) {
     try {
       const dataBuffer = fs.readFileSync(filePath);
-      const data = await pdfParse(dataBuffer);
-      return data.text;
+      // dinámicamente importamos el módulo para evitar problemas de interop
+      const dynamic = await import("pdf-parse");
+      // el módulo exporta varias cosas; la clase principal es PDFParse
+      const { PDFParse } = dynamic;
+      if (!PDFParse) {
+        console.error("Dynamic pdf-parse export:", dynamic);
+        throw new Error("No se encontró PDFParse en el módulo pdf-parse");
+      }
+      // crear instancia pasando el buffer
+      const parser = new PDFParse({ data: dataBuffer });
+      // la nueva API usa getText para obtener el contenido
+      const result = await parser.getText();
+      return result.text;
     } catch (error) {
       console.error("Error en PDF parse:", error);
       throw new Error("Error al procesar el PDF");
@@ -84,6 +90,7 @@ export default function uploadPedidos(io) {
    * Extrae información del texto usando patrones regex
    */
   function extractDataFromText(text) {
+    debugger;
     const data = {
       numAlbaran: null,
       cliente: null,
@@ -105,7 +112,7 @@ export default function uploadPedidos(io) {
 
     // Buscar cliente (línea con mayúsculas seguida de más texto)
     const clienteMatch = text.match(
-      /(?:cliente|empresa|de:|a:)\s+([A-Za-z\s&áéíóúÁÉÍÓÚ]+?)(?:\n|nif|dni|cif|tel|\d{8,})/i,
+      /(?:cliente|empresa|de:|a |Nombre: )\s+([A-Za-z\s&áéíóúÁÉÍÓÚ]+?)(?:\n|nif|dni|cif|tel|\d{8,})/i,
     );
     if (clienteMatch) {
       data.cliente = clienteMatch[1].trim();
@@ -121,7 +128,7 @@ export default function uploadPedidos(io) {
 
     // Buscar teléfono
     const telMatch = text.match(
-      /(?:tel|teléfono|phone)[\s:]*(\+?\d[\d\s\-()]{7,})/i,
+      /(?:tel|teléfono|phone|Teléfono)[\s:]*(\+?\d[\d\s\-()]{7,})/i,
     );
     if (telMatch) {
       data.tel = telMatch[1].replace(/\s/g, "").trim();
@@ -242,22 +249,23 @@ export default function uploadPedidos(io) {
         });
       }
 
+      /*
       // Guardar en base de datos
       connection = await conexion.getConnection();
       await connection.beginTransaction();
 
-      // Verificar si el cliente existe, si no, crearlo
-      const queryCheckUser =
-        "SELECT id FROM cliente WHERE nombre = ? AND Nif = ?";
-      const [clientRows] = await connection.query(queryCheckUser, [
+      // Verificar si el cliente existe por nombre para evitar duplicados
+      const queryCheckName = "SELECT id FROM cliente WHERE nombre = ?";
+      let clienteId;
+      const [nameRows] = await connection.query(queryCheckName, [
         extractedData.cliente,
-        extractedData.Nif || "",
       ]);
 
-      let clienteId;
-      if (clientRows.length > 0) {
-        clienteId = clientRows[0].id;
+      if (nameRows.length > 0) {
+        // Ya existe cliente con ese nombre, usaremos su id
+        clienteId = nameRows[0].id;
       } else {
+        // No existe, lo creamos
         clienteId =
           Date.now().toString(36) + Math.random().toString(36).substring(2);
         const queryAddCliente =
@@ -315,6 +323,7 @@ export default function uploadPedidos(io) {
       }
 
       await connection.commit();
+      */
 
       // Emitir evento a través de Socket.IO
       io.emit("nuevoAlbaran", {

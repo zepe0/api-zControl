@@ -18,6 +18,7 @@ export default function newAlbaran(io) {
       estado,
     } = req.body;
     let error;
+    let clienteId;
     let connection; // Variable para la conexión específica
 
     try {
@@ -27,15 +28,6 @@ export default function newAlbaran(io) {
       // Iniciar la transacción
       await connection.beginTransaction();
 
-      const queryAlbaranes =
-        "INSERT INTO Albaranes (id, nCliente, proceso,idPedido) VALUES (?, ?, ?,?)";
-      await connection.query(queryAlbaranes, [
-        numAlbaran,
-        cliente,
-        estado,
-        numAlbaran,
-      ]);
-
       const queryCliente =
         "INSERT INTO cliente (id,nombre, Nif, tel, dir) VALUES (?, ?, ?, ?,?)";
 
@@ -44,16 +36,27 @@ export default function newAlbaran(io) {
       const [rows] = await connection.query(queryCheckUser, [cliente, Nif]);
 
       if (rows.length <= 0) {
-        const idcliente =
+        clienteId =
           Date.now().toString(36) + Math.random().toString(36).substring(2);
         await connection.query(queryCliente, [
-          idcliente,
-          cliente,
+          clienteId,
+          
           Nif,
           tel,
           dir,
         ]);
+      } else {
+        clienteId = rows[0].id;
       }
+
+      const queryAlbaranes =
+        "INSERT INTO pedidos (id, cliente_id, estado, observaciones) VALUES (?, ?, ?, ?)";
+      await connection.query(queryAlbaranes, [
+        numAlbaran,
+        clienteId,
+        estado,
+        numAlbaran,
+      ]);
       // Comprobar e insertar materiales en la tabla Materiales
       const queryCheckMateriales =
         "SELECT nombre FROM productos WHERE nombre = ?";
@@ -73,27 +76,30 @@ export default function newAlbaran(io) {
         }
       }
 
-      // Insertar materiales en la tabla AlbaranMateriales
+      // Insertar materiales en la tabla pedido_lineas
       const queryAlbaranMateriales =
-        "INSERT INTO AlbaranMateriales (idAlbaran, idMaterial, cantidad,ral,observaciones) VALUES (?, ?, ?,?,?)";
+        "INSERT INTO pedido_lineas (pedido_id, producto_id, cantidad,ral,observaciones) VALUES (?, ?, ?,?,?)";
+
 
       for (const material of albaran) {
+        // si falta referencia de pintura, usar valor por defecto
         const { ref, unid, Ral, consumo } = material;
+        const ralValue = Ral || "Sin especificar";
 
         await connection.query(queryAlbaranMateriales, [
           numAlbaran,
           ref,
           unid,
-          Ral,
+          ralValue,
           observaciones,
-          consumo,
         ]);
 
+        // Solo actualizamos stock cuando se proporcionó un RAL real
         if (Ral) {
           // Consulta el stock y el consumo
           const [rows] = await connection.query(
             "SELECT stock FROM pintura WHERE ral = ?",
-            [Ral]
+            [Ral],
           );
           if (rows.length > 0) {
             const stockActual = parseFloat(rows[0].stock) || 0;
@@ -104,7 +110,7 @@ export default function newAlbaran(io) {
             // Actualiza el stock aunque quede negativo
             await connection.query(
               "UPDATE pintura SET stock = ? WHERE ral = ?",
-              [stockRestante, Ral]
+              [stockRestante, Ral],
             );
 
             // Si el stock es negativo, notifica al usuario
@@ -116,7 +122,7 @@ export default function newAlbaran(io) {
               Date.now().toString(36) + Math.random().toString(36).substring(2);
             await connection.query(
               "INSERT INTO pintura (id,ral, stock,marca) VALUES (?,?,?, ?)",
-              [id, Ral, -consumo * unid, "-"]
+              [id, Ral, -consumo * unid, "-"],
             );
             error = `RAL ${Ral} no encontrado, se ha creado con un stock negativo de ${
               -consumo * unid
@@ -133,7 +139,7 @@ export default function newAlbaran(io) {
       await connection.commit();
       res.status(200).json({ message: "Albarán creado correctamente", error });
       const [pinturas] = await connection.query(
-        "SELECT * FROM pintura order by stock ASC"
+        "SELECT * FROM pintura order by stock ASC",
       );
       io.emit("Actualizar_pintura", pinturas);
     } catch (err) {
