@@ -40,7 +40,7 @@ export default function newAlbaran(io) {
           Date.now().toString(36) + Math.random().toString(36).substring(2);
         await connection.query(queryCliente, [
           clienteId,
-          
+          cliente,                 
           Nif,
           tel,
           dir,

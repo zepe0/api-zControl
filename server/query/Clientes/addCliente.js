@@ -7,13 +7,22 @@ const router = express.Router();
 const addCliente = (io) => {
   router.post("/add", async (req, res) => {
     const id = randomUUID();
-    const query =
-      "INSERT INTO cliente (id, nombre, tel, dir, Nif) VALUES (?, ?, ?, ?, ?)";
     const { nombre, tel, dir, Nif } = req.body;
 
     try {
-      // Ejecutar la consulta
-      const [resultados] = await conexion.query(query, [
+      // Verificar si el NIF ya existe
+      const queryCheckNif =
+        "SELECT COUNT(*) AS count FROM cliente WHERE Nif = ?";
+      const [checkResult] = await conexion.query(queryCheckNif, [Nif]);
+
+      if (checkResult[0].count > 0) {
+        return res.status(400).json({ error: "El NIF ya está registrado" });
+      }
+
+      // Insertar el nuevo cliente
+      const queryInsert =
+        "INSERT INTO cliente (id, nombre, tel, dir, Nif) VALUES (?, ?, ?, ?, ?)";
+      const [resultados] = await conexion.query(queryInsert, [
         id,
         nombre,
         tel,
@@ -24,20 +33,12 @@ const addCliente = (io) => {
       if (resultados.affectedRows === 1) {
         // Emitir evento de cliente añadido
         io.emit("ClienteAñadido", { id, nombre, tel, dir, Nif });
-        res.status(200).json({ exito: "Cliente añadido" });
-        return;
+        return res.status(200).json({ exito: "Cliente añadido" });
       }
 
       // Caso inesperado
       res.status(500).json({ error: "No se pudo añadir el cliente" });
     } catch (err) {
-      // Manejar errores específicos
-      if (err.code === "ER_DUP_ENTRY") {
-        res.status(400).json({ error: "Cliente ya existe" });
-        return;
-      }
-
-      // Manejar otros errores
       console.error("Error al ejecutar la consulta:", err);
       res.status(500).json({ error: "Error al añadir el cliente" });
     }

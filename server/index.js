@@ -27,6 +27,8 @@ import delEStanteria from "./query/Estanteria/delEstanteria copy.js";
 import usersHoras from "./query/Usuarios/usershoras.js";
 import LoginHoras from "./query/Horas/Horas.js";
 import uploadPedidos from "./query/Pedidos/uploadPedidos.js";
+import updateEstadoPedido from "./query/Pedidos/updateEstadoPedido.js";
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 const API = process.env.API || "localhost";
@@ -50,6 +52,7 @@ app.use("/api/", LoginHoras);
 
 // Rutas para pedidos
 app.use("/api/pedidos", uploadPedidos(io));
+app.use("/api/pedidos", updateEstadoPedido);
 
 app.use("/api/productos", productosRouter);
 app.use("/api/albaranes", getAlbaranes);

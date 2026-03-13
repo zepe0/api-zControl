@@ -3,9 +3,9 @@ import conexion from "../../conexion.js";
 
 const router = express.Router();
 
-// Endpoint para obtener los albaranes con datos del cliente
+// Endpoint para obtener los albaranes con datos del cliente y detalles de líneas y productos
 router.get("", async (req, res) => {
-  const query = `
+  const queryAlbaranes = `
     SELECT
       p.id,
       p.cliente_id,
@@ -22,9 +22,40 @@ router.get("", async (req, res) => {
     ORDER BY p.fecha DESC, p.id DESC
   `;
 
+  const queryLineas = `
+    SELECT
+      pl.pedido_id,
+      pl.producto_id,
+      pl.cantidad,
+      pl.precio_unitario,
+      pl.ral,
+      pl.observaciones,
+      pl.refObra,
+      pr.nombre AS nombreMaterial,
+      pr.uni
+    FROM pedido_lineas pl
+    LEFT JOIN productos pr ON pl.producto_id = pr.id
+    WHERE pl.pedido_id = ?
+  `;
+
   try {
-    const [resultados] = await conexion.query(query);
-    res.status(200).json(resultados);
+    const [albaranes] = await conexion.query(queryAlbaranes);
+
+    for (const albaran of albaranes) {
+      const [lineas] = await conexion.query(queryLineas, [albaran.id]);
+      albaran.lineas = lineas.map((linea) => ({
+        producto_id: linea.producto_id,
+        cantidad: linea.cantidad,
+        precio_unitario: linea.precio_unitario,
+        ral: linea.ral,
+        observaciones: linea.observaciones,
+        refObra: linea.refObra,
+        nombreMaterial: linea.nombreMaterial,
+        uni: linea.uni,
+      }));
+    }
+
+    res.status(200).json(albaranes);
   } catch (err) {
     console.error("Error al ejecutar la consulta:", err);
     res.status(500).json({ error: "Error al obtener los albaranes" });

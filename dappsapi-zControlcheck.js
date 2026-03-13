@@ -1,1 +1,0 @@
-(async () => { const { PDFParse } = await import('pdf-parse'); console.log('PDFParse type:', typeof PDFParse); console.log('PDFParse keys', Object.keys(PDFParse)); console.log('PDFParse prototype methods', Object.getOwnPropertyNames(PDFParse.prototype)); })();

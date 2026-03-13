@@ -13,7 +13,7 @@ router.get("/:id", async (req, res) => {
         p.cliente_id,
         p.fecha,
         p.estado,
-        p.observaciones AS pedido_observaciones,
+        p.observaciones AS pedido_observaciones,        
         c.id AS cliente_id_ref,
         c.nombre AS cliente_nombre,
         c.Nif AS cliente_nif,
@@ -30,34 +30,34 @@ router.get("/:id", async (req, res) => {
     }
 
     const queryLineas = `
-      SELECT
+      SELECT 
         pl.id AS idLinea,
         pl.pedido_id,
         pl.producto_id,
         pl.cantidad,
+        pl.unidad_medida,          
         pl.precio_unitario,
         pl.ral,
+        pl.refObra,
         pl.observaciones,
+        pl.largo,
+        pl.ancho,
+        pl.espesor,
+        pl.total_unidades_calculadas,
+        pl.precio_pintura_extra,
+        pl.fabricacion_manual,      
+        pl.fecha_fabricacion_manual, 
         pr.nombre AS nombreMaterial,
-        pr.refObra,
-        pr.uni,
-        pr.consumo,
+        pr.uni,                     
         pr.precio AS precioCatalogo,
         pi.id AS pinturaId,
         pi.stock AS pinturaStock,
-        pi.marca AS pinturaMarca,
-        pi.RefPintura AS pinturaRef
+        pi.marca AS pinturaMarca
       FROM pedido_lineas pl
       LEFT JOIN productos pr ON pl.producto_id = pr.id
       LEFT JOIN (
-        SELECT
-          MAX(id) AS id,
-          ral,
-          MAX(stock) AS stock,
-          MAX(marca) AS marca,
-          MAX(RefPintura) AS RefPintura
-        FROM pintura
-        GROUP BY ral
+        SELECT id, ral, stock, marca FROM pintura
+        WHERE id IN (SELECT MAX(id) FROM pintura GROUP BY ral)
       ) pi ON pl.ral = pi.ral
       WHERE pl.pedido_id = ?
       ORDER BY pl.id ASC
@@ -87,17 +87,30 @@ router.get("/:id", async (req, res) => {
         pedido_id: pedido.pedido_id,
         idAlbaran: pedido.pedido_id,
       },
-      lineas,
-      productos: lineas.map((linea) => ({
-        idALbaran: linea.pedido_id,
-        idMaterial: linea.producto_id,
+      lineas: lineas.map((linea) => ({
+        idLinea: linea.idLinea,
+        pedido_id: linea.pedido_id,
+        producto_id: linea.producto_id,
         cantidad: linea.cantidad,
+        precio_unitario: linea.precio_unitario,
         ral: linea.ral,
         observaciones: linea.observaciones,
-        precio_unitario: linea.precio_unitario,
-        nombreMaterial: linea.nombreMaterial,
         refObra: linea.refObra,
+        largo: linea.largo,
+        ancho: linea.ancho,
+        espesor: linea.espesor,
+        total_unidades_calculadas: linea.total_unidades_calculadas,
+        precio_pintura_extra: linea.precio_pintura_extra,
+        fabricacion_manual: linea.fabricacion_manual,
+        fecha_fabricacion_manual: linea.fecha_fabricacion_manual,
+        nombreMaterial: linea.nombreMaterial,
         uni: linea.uni,
+        consumo: linea.consumo,
+        precioCatalogo: linea.precioCatalogo,
+        pinturaId: linea.pinturaId,
+        pinturaStock: linea.pinturaStock,
+        pinturaMarca: linea.pinturaMarca,
+        pinturaRef: linea.pinturaRef,
       })),
     };
 
