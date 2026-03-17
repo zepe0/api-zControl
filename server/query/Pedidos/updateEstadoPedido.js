@@ -4,8 +4,8 @@ import { console } from "inspector";
 
 const router = express.Router();
 
-router.put("/:id/estado", async (req, res) => {
-  const { id } = req.params;
+const actualizarEstadoPedido = async (req, res) => {
+  const pedidoId = req.params.pedidoId || req.params.id;
   const { estado } = req.body;
 
   // Validar que el estado sea uno permitido
@@ -25,7 +25,7 @@ router.put("/:id/estado", async (req, res) => {
 
   try {
     const query = "UPDATE pedidos SET estado = ? WHERE id = ?";
-    const [resultados] = await conexion.query(query, [estado, id]);
+    const [resultados] = await conexion.query(query, [estado, pedidoId]);
 
     if (resultados.affectedRows === 0) {
       return res.status(404).json({ error: "Pedido no encontrado" });
@@ -36,6 +36,9 @@ router.put("/:id/estado", async (req, res) => {
     console.error("Error al ejecutar la consulta:", err);
     res.status(500).json({ error: "Error al actualizar el estado del pedido" });
   }
-});
+};
+
+router.put("/:id/estado", actualizarEstadoPedido);
+router.patch("/:pedidoId/estado", actualizarEstadoPedido);
 
 export default router;

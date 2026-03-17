@@ -38,6 +38,7 @@ router.get("/:id", async (req, res) => {
         pl.unidad_medida,          
         pl.precio_unitario,
         pl.ral,
+        pl.tiene_imprimacion, -- AÑADIDO: Recuperamos el flag de imprimación
         pl.refObra,
         pl.observaciones,
         pl.largo,
@@ -48,7 +49,7 @@ router.get("/:id", async (req, res) => {
         pl.fabricacion_manual,      
         pl.fecha_fabricacion_manual, 
         pr.nombre AS nombreMaterial,
-        pr.uni,                     
+        pr.uni,                                     
         pr.precio AS precioCatalogo,
         pi.id AS pinturaId,
         pi.stock AS pinturaStock,
@@ -66,7 +67,6 @@ router.get("/:id", async (req, res) => {
 
     const pedido = pedidoRows[0];
 
-    // Respuesta nueva + compatibilidad con front anterior
     const response = {
       pedido: {
         id: pedido.pedido_id,
@@ -94,6 +94,7 @@ router.get("/:id", async (req, res) => {
         cantidad: linea.cantidad,
         precio_unitario: linea.precio_unitario,
         ral: linea.ral,
+        tiene_imprimacion: linea.tiene_imprimacion, // AÑADIDO: Lo enviamos al front
         observaciones: linea.observaciones,
         refObra: linea.refObra,
         largo: linea.largo,

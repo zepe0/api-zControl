@@ -28,6 +28,8 @@ import usersHoras from "./query/Usuarios/usershoras.js";
 import LoginHoras from "./query/Horas/Horas.js";
 import uploadPedidos from "./query/Pedidos/uploadPedidos.js";
 import updateEstadoPedido from "./query/Pedidos/updateEstadoPedido.js";
+import editLinia from "./query/Pedidos/editLinia.js";
+import tarifasRouter from "./routes/tarifas.js";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -53,6 +55,10 @@ app.use("/api/", LoginHoras);
 // Rutas para pedidos
 app.use("/api/pedidos", uploadPedidos(io));
 app.use("/api/pedidos", updateEstadoPedido);
+app.use("/api/linia", editLinia);
+
+// Rutas para tarifas
+app.use("/api", tarifasRouter);
 
 app.use("/api/productos", productosRouter);
 app.use("/api/albaranes", getAlbaranes);
