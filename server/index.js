@@ -19,6 +19,7 @@ import getCliente from "./query/Clientes/getCliente.js";
 import newAlbaran from "./query/Albaranes/newAlbaran.js";
 import getAlbaran from "./query/Albaranes/getAlbaran.js";
 import editPintura from "./query/Pintura/editPintura.js";
+import guardarPintura from "./query/Pintura/guardarPintura.js";
 import editMaterial from "./query/Material/editMaterial.js";
 import getAlbaranValor from "./query/Albaranes/getAlbaranValor.js";
 import addEStanteria from "./query/Estanteria/addEstanteria.js";
@@ -77,6 +78,7 @@ app.use("/api/cliente", getCliente);
 
 app.use("/", getPinturas);
 app.use("/api/pintura/edit", editPintura);
+app.use("/api/pintura", guardarPintura);
 
 app.use("/api/estanterias/add", addEStanteria(io));
 app.use("/api/estanterias/delete", delEStanteria(io));
