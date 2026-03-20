@@ -15,6 +15,7 @@ import addMaterial from "./query/Material/addMaterial.js";
 import getMaterial from "./query/Material/getMaterial.js";
 import getClientes from "./query/Clientes/getClientes.js";
 import addCliente from "./query/Clientes/addCliente.js";
+import editCliente from "./query/Clientes/editCliente.js";
 import getCliente from "./query/Clientes/getCliente.js";
 import newAlbaran from "./query/Albaranes/newAlbaran.js";
 import getAlbaran from "./query/Albaranes/getAlbaran.js";
@@ -31,6 +32,7 @@ import uploadPedidos from "./query/Pedidos/uploadPedidos.js";
 import updateEstadoPedido from "./query/Pedidos/updateEstadoPedido.js";
 import editLinia from "./query/Pedidos/editLinia.js";
 import tarifasRouter from "./routes/tarifas.js";
+import analyticsRouter from "./routes/analytics.js";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -55,11 +57,12 @@ app.use("/api/", LoginHoras);
 
 // Rutas para pedidos
 app.use("/api/pedidos", uploadPedidos(io));
-app.use("/api/pedidos", updateEstadoPedido);
+app.use("/api/pedidos", updateEstadoPedido(io));
 app.use("/api/linia", editLinia);
 
 // Rutas para tarifas
 app.use("/api", tarifasRouter);
+app.use("/api", analyticsRouter);
 
 app.use("/api/productos", productosRouter);
 app.use("/api/albaranes", getAlbaranes);
@@ -74,6 +77,7 @@ app.use("/api/materiales/edit", editMaterial);
 
 app.use("/api/cliente", getClientes);
 app.use("/api/cliente", addCliente(io));
+app.use("/api/cliente", editCliente);
 app.use("/api/cliente", getCliente);
 
 app.use("/", getPinturas);

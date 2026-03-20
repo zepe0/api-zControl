@@ -33,7 +33,10 @@ const addCliente = (io) => {
       if (resultados.affectedRows === 1) {
         // Emitir evento de cliente añadido
         io.emit("ClienteAñadido", { id, nombre, tel, dir, Nif });
-        return res.status(200).json({ exito: "Cliente añadido" });
+        return res.status(200).json({
+          exito: "Cliente añadido",
+          cliente: { id, nombre, tel, dir, Nif },
+        });
       }
 
       // Caso inesperado
