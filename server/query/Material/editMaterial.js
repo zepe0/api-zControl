@@ -6,6 +6,7 @@ const router = express.Router();
 // Endpoint para obtener los pinturas
 router.put("", async (req, res) => {
   const payload = req.body?.formData || req.body || {}; 
+  debugger
 // deveria llegar el iddppedido,idMaterial,nombreMaterial,Cantidad,ral,refObra
 
   const idMaterial = payload.idMaterial || payload.id;

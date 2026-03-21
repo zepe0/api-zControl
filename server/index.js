@@ -33,6 +33,7 @@ import updateEstadoPedido from "./query/Pedidos/updateEstadoPedido.js";
 import editLinia from "./query/Pedidos/editLinia.js";
 import tarifasRouter from "./routes/tarifas.js";
 import analyticsRouter from "./routes/analytics.js";
+import updateAlbaran from "./query/Albaranes/UpdateAlbaran.js";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -59,6 +60,7 @@ app.use("/api/", LoginHoras);
 app.use("/api/pedidos", uploadPedidos(io));
 app.use("/api/pedidos", updateEstadoPedido(io));
 app.use("/api/linia", editLinia);
+app.use("/api/pedidos/update", updateAlbaran(io));
 
 // Rutas para tarifas
 app.use("/api", tarifasRouter);

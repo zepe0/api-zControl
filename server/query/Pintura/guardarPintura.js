@@ -79,6 +79,7 @@ const registrarEntradaStockLinea = async ({
   );
 
   if (pinturaRows.length === 0) {
+    debugger;
     throw new Error(`No se encontró la pintura ${pinturaId} para sumar stock`);
   }
 
@@ -194,6 +195,7 @@ router.post("/guardar", async (req, res) => {
       }
 
       if (kg <= 0) {
+        debugger;
         return res.status(400).json({
           success: false,
           message: "kg_entrada debe ser mayor que 0",
