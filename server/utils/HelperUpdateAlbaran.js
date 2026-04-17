@@ -22,17 +22,51 @@ export const revertirStockPintura = async (lineaId, connection) => {
     [lineaId],
   );
 
-  for (const mov of movimientos) {
+  if (movimientos.length > 0) {
+    // Modo trazable: revertimos según los movimientos registrados
+    for (const mov of movimientos) {
+      await connection.query(
+        "UPDATE pintura SET stock = stock + ? WHERE id = ?",
+        [mov.cantidad_kg || mov.cantidad || 0, mov.pintura_id],
+      );
+    }
+    // Limpiamos los movimientos revertidos
     await connection.query(
-      "UPDATE pintura SET stock = stock + ? WHERE id = ?",
-      [mov.cantidad, mov.pintura_id],
+      "DELETE FROM pintura_stock_movimientos WHERE pedido_linea_id = ?",
+      [lineaId],
     );
-  }
+  } else {
+    // Modo Fallback: No hay movimientos (pedido antiguo o lógica previa)
+    // Consultamos la línea directamente para intentar revertir lo que haya
+    const [lineas] = await connection.query(
+      "SELECT ral, cantidad, consumo_pintura_kg, tiene_imprimacion FROM pedido_lineas WHERE id = ?",
+      [lineaId],
+    );
 
-  await connection.query(
-    "DELETE FROM pintura_stock_movimientos WHERE pedido_linea_id = ?",
-    [lineaId],
-  );
+    if (lineas.length > 0) {
+      const l = lineas[0];
+      const cantidad = parseFloat(l.cantidad) || 0;
+      const consumo = parseFloat(l.consumo_pintura_kg) || 0;
+      const totalKg = cantidad * consumo;
+
+      if (totalKg > 0) {
+        // Revertir Pintura Principal
+        if (l.ral && l.ral !== "Sin especificar") {
+          await connection.query(
+            "UPDATE pintura SET stock = stock + ? WHERE ral = ?",
+            [totalKg, l.ral],
+          );
+        }
+        // Revertir Imprimación si la línea lo indica
+        if (l.tiene_imprimacion === 1 || l.tiene_imprimacion === true) {
+          await connection.query(
+            "UPDATE pintura SET stock = stock + ? WHERE ral = ?",
+            [totalKg, "IMPRIMACION"],
+          );
+        }
+      }
+    }
+  }
 };
 
 /**
@@ -64,23 +98,52 @@ export const aplicarStockPintura = async (
   lineaData,
   connection,
 ) => {
-  const kg = parseFloat(lineaData.consumo_pintura_kg || lineaData.consumo) || 0;
-  if (kg <= 0) return;
+  const consumoPintura = parseFloat(lineaData.consumo_pintura_kg || lineaData.consumo) || 0;
+  const cantidad = parseFloat(lineaData.cantidad || lineaData.unid) || 1;
+  const kgTotalPintura = consumoPintura * cantidad;
+  const ralValue = lineaData.ral || "Sin especificar";
+  const tieneImprimacion =
+    lineaData.tiene_imprimacion === true ||
+    lineaData.tiene_imprimacion === 1 ||
+    String(lineaData.tiene_imprimacion).toLowerCase() === "true" ||
+    String(lineaData.tiene_imprimacion) === "1";
 
-  const [pinturas] = await connection.query(
-    "SELECT * FROM pintura WHERE ral = ? LIMIT 1",
-    [lineaData.ral],
-  );
+  // 1. Manejo de Pintura Principal
+  if (kgTotalPintura > 0 && ralValue !== "Sin especificar") {
+    const [pinturas] = await connection.query(
+      `SELECT * FROM pintura 
+       WHERE UPPER(TRIM(ral)) = ? 
+          OR UPPER(TRIM(ral)) LIKE CONCAT(?, ' %') 
+       LIMIT 1`,
+      [ralValue.toUpperCase(), ralValue.toUpperCase()],
+    );
 
-  if (pinturas.length > 0) {
-    const p = pinturas[0];
-    const stockAnterior = p.stock;
-    const stockPosterior = stockAnterior - kg;
+    let pinturaId;
+    let stockAnterior = 0;
 
-    await connection.query("UPDATE pintura SET stock = ? WHERE id = ?", [
-      stockPosterior,
-      p.id,
-    ]);
+    if (pinturas.length > 0) {
+      const p = pinturas[0];
+      pinturaId = p.id;
+      stockAnterior = parseFloat(p.stock) || 0;
+      const stockPosterior = stockAnterior - kgTotalPintura;
+
+      await connection.query("UPDATE pintura SET stock = ? WHERE id = ?", [
+        stockPosterior,
+        pinturaId,
+      ]);
+    } else {
+      // Crear pintura nueva si no existe (igual que en newAlbaran)
+      pinturaId = Date.now().toString(36) + Math.random().toString(36).substring(2);
+      stockAnterior = 0;
+      const stockPosterior = -kgTotalPintura;
+
+      await connection.query(
+        "INSERT INTO pintura (id, ral, stock, marca) VALUES (?, ?, ?, ?)",
+        [pinturaId, ralValue, stockPosterior, "Genérica"],
+      );
+    }
+
+    // Registrar movimiento de pintura
     await connection.query(
       `INSERT INTO pintura_stock_movimientos
       (pedido_id, pedido_linea_id, pintura_id, ral_snapshot, tipo, cantidad_kg, stock_anterior_kg, stock_nuevo_kg, origen)
@@ -88,11 +151,60 @@ export const aplicarStockPintura = async (
       [
         pedidoId,
         lineaId,
-        p.id,
-        lineaData.ral,
-        kg,
+        pinturaId,
+        ralValue,
+        kgTotalPintura,
         stockAnterior,
-        stockPosterior,
+        stockAnterior - kgTotalPintura,
+      ],
+    );
+  }
+
+  // 2. Manejo de Imprimación
+  if (tieneImprimacion && kgTotalPintura > 0) {
+    const ralImp = "IMPRIMACION";
+    const [registrosImp] = await connection.query(
+      "SELECT * FROM pintura WHERE ral = ? LIMIT 1",
+      [ralImp],
+    );
+
+    let impId;
+    let stockAnteriorImp = 0;
+
+    if (registrosImp.length > 0) {
+      const imp = registrosImp[0];
+      impId = imp.id;
+      stockAnteriorImp = parseFloat(imp.stock) || 0;
+      const stockPosteriorImp = stockAnteriorImp - kgTotalPintura;
+
+      await connection.query("UPDATE pintura SET stock = ? WHERE id = ?", [
+        stockPosteriorImp,
+        impId,
+      ]);
+    } else {
+      impId = Date.now().toString(36) + Math.random().toString(36).substring(2);
+      stockAnteriorImp = 0;
+      const stockPosteriorImp = -kgTotalPintura;
+
+      await connection.query(
+        "INSERT INTO pintura (id, ral, stock, marca) VALUES (?, ?, ?, ?)",
+        [impId, ralImp, stockPosteriorImp, "-"],
+      );
+    }
+
+    // Registrar movimiento de imprimación
+    await connection.query(
+      `INSERT INTO pintura_stock_movimientos
+      (pedido_id, pedido_linea_id, pintura_id, ral_snapshot, tipo, cantidad_kg, stock_anterior_kg, stock_nuevo_kg, origen)
+      VALUES (?, ?, ?, ?, 'AJUSTE', ?, ?, ?, 'update_pedido_imprimacion')`,
+      [
+        pedidoId,
+        lineaId,
+        impId,
+        ralImp,
+        kgTotalPintura,
+        stockAnteriorImp,
+        stockAnteriorImp - kgTotalPintura,
       ],
     );
   }

@@ -4,8 +4,103 @@ import {
   revertirStockPintura,
   aplicarStockPintura,
 } from "../../utils/HelperUpdateAlbaran.js";
+import { calcularConsumoPintura } from "../../utils/calcularConsumo.js";
 
 const router = express.Router();
+
+const ACABADO_TOKENS = new Map([
+  ["m", "M"],
+  ["mate", "M"],
+  ["gof", "GOF"],
+  ["gofrado", "GOF"],
+  ["txt", "TXT"],
+  ["texturado", "TXT"],
+]);
+
+const normalizarRalInfo = (ralInput) => {
+  const raw = String(ralInput ?? "").trim();
+  const normalizedRaw = raw
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\-_/]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (/\bIMP(?:RIMACION)?\b/i.test(normalizedRaw)) {
+    const marcaImp = normalizedRaw
+      .replace(/\bIMP(?:RIMACION)?\b/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return {
+      ralCodigo: "IMPRIMACION",
+      esImprimacion: true,
+      marca: marcaImp || "-",
+    };
+  }
+
+  const upperRaw = raw.toUpperCase();
+  const tokens = normalizedRaw.length > 0 ? normalizedRaw.split(" ") : [];
+
+  const firstToken = (tokens[0] || "").toLowerCase();
+  if (firstToken === "noir") {
+    const resto = tokens.slice(1);
+    const nombreTokens = ["NOIR"];
+    const marcaTokens = [];
+    let marcaDetectada = false;
+
+    for (const tk of resto) {
+      const hasLetters = /[a-z]/i.test(tk);
+      if (!marcaDetectada && !hasLetters) {
+        nombreTokens.push(tk);
+        continue;
+      }
+      marcaDetectada = true;
+      marcaTokens.push(tk);
+    }
+
+    return {
+      ralCodigo: nombreTokens.join(" ").trim(),
+      esImprimacion: false,
+      marca: marcaTokens.join(" ").trim() || "Sin marca",
+    };
+  }
+
+  const ralMatch = upperRaw.match(/(\d{4})/);
+  const ralBase = ralMatch ? ralMatch[1] : "";
+
+  const acabadosAdjuntos = [];
+  const marcaTokens = [];
+
+  for (const tk of tokens) {
+    const lower = tk.toLowerCase();
+    
+    // Si el token contiene el número RAL (ej: 8015M), extraemos acabado pegado
+    if (ralBase && lower.includes(ralBase)) {
+      const remainder = lower.replace(ralBase, "").trim();
+      if (remainder && ACABADO_TOKENS.has(remainder)) {
+        acabadosAdjuntos.push(ACABADO_TOKENS.get(remainder));
+      }
+      continue;
+    }
+
+    if (ACABADO_TOKENS.has(lower)) {
+      acabadosAdjuntos.push(ACABADO_TOKENS.get(lower));
+      continue;
+    }
+    marcaTokens.push(tk);
+  }
+
+  // Combinar base con acabados (ej: "8015 M GOF")
+  const ralCodigo = ralBase
+    ? `${ralBase}${acabadosAdjuntos.length > 0 ? " " + [...new Set(acabadosAdjuntos)].join(" ") : ""}`
+    : "";
+
+  return {
+    ralCodigo,
+    esImprimacion: false,
+    marca: marcaTokens.join(" ").trim() || "Genérica",
+  };
+};
 
 const updateAlbaran = (io) => {
   router.put("/:pedido_id", async (req, res) => {
@@ -46,98 +141,164 @@ const updateAlbaran = (io) => {
 
       // 3. Procesar líneas del payload
       for (const linea of albaran) {
-        // Extraemos refObra de la línea actual
-        const refObraLinea = linea.refObra || "";
+        const refObraLinea = linea.refObra || "-";
+        const ralRawValue = linea.Ral || linea.ral || "Sin especificar";
+        const ralInfo = normalizarRalInfo(ralRawValue);
+        const ralFinal = ralInfo.ralCodigo || "Sin especificar";
+        const tieneImprimacion =
+          linea.tiene_imprimacion === true ||
+          linea.tiene_imprimacion === 1 ||
+          String(linea.tiene_imprimacion).toLowerCase() === "true" ||
+          String(linea.tiene_imprimacion) === "1";
 
-        if (!linea.lineId) {
-          // INSERTAR NUEVA (Incluimos ref_obra en la columna correspondiente)
-          const [ins] = await connection.query(
-            `INSERT INTO pedido_lineas (
-      pedido_id, 
-      producto_id, 
-      cantidad, 
-      ral, 
-      consumo_pintura_kg, 
-      precio_unitario, 
-      largo, 
-      ancho, 
-      espesor, 
-      nombre_snapshot, 
-      refObra
-    ) 
-    VALUES (
-      ?, 
-      (SELECT id FROM productos WHERE nombre = ? LIMIT 1), 
-      ?, ?, ?, ?, ?, ?, ?, ?, ?
-    )`,
+        // Calcular consumo automático si no viene del frontend
+        const consumoCalculado = calcularConsumoPintura({
+          unidad_medida: linea.unidad_medida,
+          largo: linea.largo,
+          ancho: linea.ancho,
+          espesor: linea.espesor,
+          consumoManual: linea.consumo,
+        });
+
+        // Lógica de productoIdSeguro para evitar 9999 o vacíos
+        const productoIdSeguro =
+          linea.idMaterial && String(linea.idMaterial).trim() !== "" && String(linea.idMaterial) !== "9999"
+            ? linea.idMaterial
+            : linea.ref && String(linea.ref).trim() !== "" && String(linea.ref) !== "9999"
+              ? linea.ref
+              : `${linea.mat || "Producto"} ${linea.largo ?? ""}x${linea.ancho ?? ""}x${linea.espesor ?? ""}`.trim();
+
+        // Sincronizar tabla maestra de 'productos'
+        const [rowsProd] = await connection.query("SELECT id FROM productos WHERE id = ?", [productoIdSeguro]);
+        if (rowsProd.length === 0) {
+          await connection.query(
+            "INSERT INTO productos (id, nombre, uni, unidad_medida, consumo) VALUES (?, ?, ?, ?, ?)",
             [
-              pedido_id,
-              linea.mat,
-              linea.cantidad,
-              linea.ral,
-              linea.consumo,
-              linea.precio_unitario,
-              linea.largo ? linea.largo : "00.00",
-              linea.ancho ? linea.ancho : "00.00",
-              linea.espesor,
-              linea.mat,
-              refObraLinea,
+              productoIdSeguro, 
+              linea.mat || productoIdSeguro, 
+              linea.cantidad || linea.unid || 1, 
+              linea.unidad_medida || "ud", 
+              consumoCalculado
             ],
           );
-          await aplicarStockPintura(pedido_id, ins.insertId, linea, connection);
         } else {
-          // ACTUALIZAR SOLO SI HAY DIFERENCIAS
+          // Si ya existe, actualizamos nombre y consumo para que el maestro esté al día (Punto 5 solicitado)
+          await connection.query(
+            "UPDATE productos SET nombre = ?, unidad_medida = ?, consumo = ? WHERE id = ?",
+            [
+              linea.mat || rowsProd[0].nombre, 
+              linea.unidad_medida || "ud", 
+              consumoCalculado, 
+              productoIdSeguro
+            ]
+          );
+        }
+
+        if (!linea.lineId) {
+          // INSERTAR NUEVA
+          const [ins] = await connection.query(
+            `INSERT INTO pedido_lineas (
+              pedido_id, 
+              producto_id, 
+              cantidad, 
+              ral, 
+              consumo_pintura_kg, 
+              precio_unitario, 
+              largo, 
+              ancho, 
+              espesor, 
+              nombre_snapshot, 
+              refObra,
+              tiene_imprimacion
+            ) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              pedido_id,
+              productoIdSeguro,
+              linea.cantidad || linea.unid || 1,
+              ralFinal,
+              consumoCalculado,
+              linea.precio_unitario,
+              linea.largo || null,
+              linea.ancho || null,
+              linea.espesor || 1,
+              linea.mat,
+              refObraLinea,
+              tieneImprimacion ? 1 : 0,
+            ],
+          );
+          // Usamos la línea normalizada para aplicar stock
+          const lineaNormalizada = {
+            ...linea,
+            ral: ralFinal,
+            tiene_imprimacion: tieneImprimacion,
+            cantidad: linea.cantidad || linea.unid || 1,
+            consumo: consumoCalculado,
+          };
+          await aplicarStockPintura(pedido_id, ins.insertId, lineaNormalizada, connection);
+        } else {
+          // ACTUALIZAR SI HAY DIFERENCIAS
           const [rows] = await connection.query(
-            `SELECT producto_id, cantidad, ral, consumo_pintura_kg, precio_unitario, largo, ancho, espesor, nombre_snapshot, refObra FROM pedido_lineas WHERE id = ?`,
+            `SELECT producto_id, cantidad, ral, consumo_pintura_kg, precio_unitario, largo, ancho, espesor, nombre_snapshot, refObra, tiene_imprimacion 
+             FROM pedido_lineas 
+             WHERE id = ?`,
             [linea.lineId],
           );
-          const dbLinea = rows[0];
-          const hayDiferencias =
-            dbLinea.producto_id !== linea.idMaterial ||
-            dbLinea.cantidad !== linea.cantidad ||
-            dbLinea.ral !== linea.ral ||
-            dbLinea.consumo_pintura_kg !== linea.consumo ||
-            dbLinea.precio_unitario !== linea.precio_unitario ||
-            dbLinea.largo !== linea.largo ||
-            dbLinea.ancho !== linea.ancho ||
-            dbLinea.espesor !== linea.espesor ||
-            dbLinea.nombre_snapshot !== linea.mat ||
-            dbLinea.ref_obra !== refObraLinea;
+          
+          if (rows.length > 0) {
+            const dbLinea = rows[0];
+            const hayDiferenciasStock =
+              dbLinea.ral !== ralFinal ||
+              parseFloat(dbLinea.cantidad) !== parseFloat(linea.cantidad || linea.unid || 1) ||
+              parseFloat(dbLinea.consumo_pintura_kg) !== parseFloat(linea.consumo || 0) ||
+              Boolean(dbLinea.tiene_imprimacion) !== tieneImprimacion;
 
-          if (hayDiferencias) {
-            // Solo revertir/aplicar stock si cambia el RAL
-            const ralCambiado = dbLinea.ral !== linea.ral;
-            if (ralCambiado) {
-              await revertirStockPintura(linea.lineId, connection);
-            }
-            debugger;
-            await connection.query(
-              `UPDATE pedido_lineas SET 
-                producto_id=?, cantidad=?, ral=?, consumo_pintura_kg=?, 
-                precio_unitario=?, largo=?, ancho=?, espesor=?, 
-                nombre_snapshot=?, refObra=? 
-               WHERE id=?`,
-              [
-                linea.idMaterial,
-                linea.cantidad,
-                linea.ral,
-                linea.consumo === "" ? null : linea.consumo,
-                linea.precio_unitario,
-                linea.largo === "" ? null : linea.largo,
-                linea.ancho === "" ? null : linea.ancho,
-                linea.espesor === "" ? null : linea.espesor,
-                linea.mat,
-                refObraLinea,
-                linea.lineId,
-              ],
-            );
-            if (ralCambiado) {
-              await aplicarStockPintura(
-                pedido_id,
-                linea.lineId,
-                linea,
-                connection,
+            const hayOtrasDiferencias =
+              dbLinea.producto_id !== productoIdSeguro ||
+              dbLinea.precio_unitario !== linea.precio_unitario ||
+              dbLinea.largo !== linea.largo ||
+              dbLinea.ancho !== linea.ancho ||
+              dbLinea.espesor !== linea.espesor ||
+              dbLinea.nombre_snapshot !== linea.mat ||
+              dbLinea.refObra !== refObraLinea;
+
+            if (hayDiferenciasStock || hayOtrasDiferencias) {
+              if (hayDiferenciasStock) {
+                await revertirStockPintura(linea.lineId, connection);
+              }
+
+              await connection.query(
+                `UPDATE pedido_lineas SET 
+                  producto_id=?, cantidad=?, ral=?, consumo_pintura_kg=?, 
+                  precio_unitario=?, largo=?, ancho=?, espesor=?, 
+                  nombre_snapshot=?, refObra=?, tiene_imprimacion=? 
+                 WHERE id=?`,
+                [
+                  productoIdSeguro,
+                  linea.cantidad || linea.unid || 1,
+                  ralFinal,
+                  consumoCalculado,
+                  linea.precio_unitario,
+                  linea.largo || null,
+                  linea.ancho || null,
+                  linea.espesor || 1,
+                  linea.mat,
+                  refObraLinea,
+                  tieneImprimacion ? 1 : 0,
+                  linea.lineId,
+                ],
               );
+
+              if (hayDiferenciasStock) {
+                const lineaNormalizada = {
+                  ...linea,
+                  ral: ralFinal,
+                  tiene_imprimacion: tieneImprimacion,
+                  cantidad: linea.cantidad || linea.unid || 1,
+                  consumo: consumoCalculado,
+                };
+                await aplicarStockPintura(pedido_id, linea.lineId, lineaNormalizada, connection);
+              }
             }
           }
         }

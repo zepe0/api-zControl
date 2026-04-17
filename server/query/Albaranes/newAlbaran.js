@@ -1,5 +1,7 @@
 import express from "express";
 import conexion from "../../conexion.js";
+import { calcularConsumoPintura } from "../../utils/calcularConsumo.js";
+import { aplicarStockPintura } from "../../utils/HelperUpdateAlbaran.js";
 
 export default function newAlbaran(io) {
   const router = express.Router();
@@ -73,32 +75,42 @@ export default function newAlbaran(io) {
     }
 
     // Caso RAL estándar: los 4 primeros dígitos son el código.
-    const ralMatch = upperRaw.match(/\b(\d{4})\b/);
+    const ralMatch = upperRaw.match(/(\d{4})/);
     const ralBase = ralMatch ? ralMatch[1] : "";
 
-    let acabado = null;
+    const acabadosAdjuntos = [];
     const marcaTokens = [];
 
     for (const tk of tokens) {
       const lower = tk.toLowerCase();
-      if (ralBase && tk === ralBase) continue;
-      if (!acabado && ACABADO_TOKENS.has(lower)) {
-        acabado = ACABADO_TOKENS.get(lower);
+
+      // Si el token contiene el número RAL (ej: 8015M), extraemos acabado pegado
+      if (ralBase && lower.includes(ralBase)) {
+        const remainder = lower.replace(ralBase, "").trim();
+        if (remainder && ACABADO_TOKENS.has(remainder)) {
+          acabadosAdjuntos.push(ACABADO_TOKENS.get(remainder));
+        }
+        continue;
+      }
+
+      if (ACABADO_TOKENS.has(lower)) {
+        acabadosAdjuntos.push(ACABADO_TOKENS.get(lower));
         continue;
       }
       marcaTokens.push(tk);
     }
 
+    const uniqueAcabados = [...new Set(acabadosAdjuntos)];
     const ralCodigo = ralBase
-      ? `${ralBase}${acabado ? ` ${acabado}` : ""}`
+      ? `${ralBase}${uniqueAcabados.length > 0 ? " " + uniqueAcabados.join(" ") : ""}`
       : "";
 
     const marcaLimpia = marcaTokens.join(" ").trim();
 
     return {
       ralCodigo,
-      esMate: acabado === "M",
-      acabado,
+      esMate: uniqueAcabados.includes("M"),
+      acabado: uniqueAcabados.join(" "),
       esImprimacion: false,
       esNoir: false,
       marca: marcaLimpia || "Genérica",
@@ -322,21 +334,38 @@ export default function newAlbaran(io) {
         "INSERT INTO productos (id, nombre, uni) VALUES (?, ?, ?)";
 
       for (const material of albaran) {
-        const { ref, mat, unid } = material;
-        const [rows] = await connection.query(queryCheckMateriales, [ref]);
+        const { ref, mat, unid, unidad_medida, largo, ancho, espesor, consumo } = material;
+        const parseDecimalOrNull = (val) => {
+          if (val === undefined || val === null || String(val).trim() === "") return null;
+          const p = Number.parseFloat(String(val).replace(",", "."));
+          return Number.isNaN(p) ? null : p;
+        };
+        const cCalculado = calcularConsumoPintura({
+          unidad_medida,
+          largo: parseDecimalOrNull(largo),
+          ancho: parseDecimalOrNull(ancho),
+          espesor: parseDecimalOrNull(espesor) ?? 1,
+          consumoManual: consumo,
+        });
 
+        const [rows] = await connection.query(queryCheckMateriales, [ref]);
         if (rows.length === 0) {
-          await connection.query(queryInsertMateriales, [ref, mat, unid ?? 1]);
+          await connection.query(
+            "INSERT INTO productos (id, nombre, uni, unidad_medida, consumo) VALUES (?, ?, ?, ?, ?)", 
+            [ref, mat, unid ?? 1, unidad_medida || "ud", cCalculado]
+          );
+        } else {
+          await connection.query(
+            "UPDATE productos SET nombre = ?, unidad_medida = ?, consumo = ? WHERE id = ?",
+            [mat || rows[0].nombre, unidad_medida || "ud", cCalculado, ref]
+          );
         }
-        // Si ya existe, no se toca: las medidas propias de este pedido van en pedido_lineas
       }
 
-      // Insertar materiales en la tabla pedido_lineas
       const queryAlbaranMateriales =
-        "INSERT INTO pedido_lineas (pedido_id, producto_id, cantidad, ral, observaciones, refObra, unidad_medida, precio_unitario, largo, ancho, espesor, tiene_imprimacion, fabricacion_manual, fecha_fabricacion_manual, nombre_snapshot) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        "INSERT INTO pedido_lineas (pedido_id, producto_id, cantidad, ral, observaciones, refObra, unidad_medida, precio_unitario, largo, ancho, espesor, tiene_imprimacion, fabricacion_manual, fecha_fabricacion_manual, nombre_snapshot, consumo_pintura_kg) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
       for (const material of albaran) {
-        // Snapshot por línea: usar valores calculados/confirmados por el front
         const {
           ref,
           unid,
@@ -357,50 +386,46 @@ export default function newAlbaran(io) {
           fabricacion_manual,
           fecha_fabricacion_manual,
           mat,
+          idMaterial
         } = material;
+
         const ralRawValue = Ral || ral || "Sin especificar";
         const ralInfo = normalizarRalInfo(ralRawValue);
         const ralValue = ralInfo.ralCodigo || "Sin especificar";
-        const cantidadParse = Number.parseFloat(
-          String(cantidad ?? unid ?? 1).replace(",", "."),
-        );
-        const cantidadValue = Number.isNaN(cantidadParse) ? 1 : cantidadParse;
-        const precioRaw =
-          precio_unitario ?? precioUnitario ?? precio_sugerido ?? precio ?? 0;
-        const precioUnitarioValue = Number.parseFloat(
-          String(precioRaw).replace(",", "."),
-        );
-        const parseDecimalOrNull = (value) => {
-          if (
-            value === undefined ||
-            value === null ||
-            String(value).trim() === ""
-          ) {
-            return null;
-          }
-          const parsed = Number.parseFloat(String(value).replace(",", "."));
-          return Number.isNaN(parsed) ? null : parsed;
-        };
-        const largoValue = parseDecimalOrNull(largo);
-        const anchoValue = parseDecimalOrNull(ancho);
-        const espesorValue = parseDecimalOrNull(espesor) ?? 1;
-        const consumoValue =
-          Number.parseFloat(String(consumo ?? 0).replace(",", ".")) || 0;
-        const tieneImprimacionValue =
-          tiene_imprimacion === true ||
-          tiene_imprimacion === 1 ||
-          String(tiene_imprimacion).toLowerCase() === "true" ||
-          String(tiene_imprimacion) === "1";
+        
+        const cantidadValue = toDecimal(cantidad ?? unid ?? 1, 1);
+        const precioUnitarioValue = toDecimal(precio_unitario ?? precioUnitario ?? precio_sugerido ?? precio ?? 0, 0);
+        
+        const largoValue = toNullableDecimal(largo);
+        const anchoValue = toNullableDecimal(ancho);
+        const espesorValue = toNullableDecimal(espesor) ?? 1;
 
-        await connection.query(queryAlbaranMateriales, [
+        const consumoValue = calcularConsumoPintura({
+          unidad_medida,
+          largo: largoValue,
+          ancho: anchoValue,
+          espesor: espesorValue,
+          consumoManual: consumo,
+        });
+
+        const tieneImprimacionValue = isTruthy(tiene_imprimacion);
+
+        const productoIdSeguro =
+          idMaterial && String(idMaterial).trim() !== "" && String(idMaterial) !== "9999"
+            ? idMaterial
+            : ref && String(ref).trim() !== "" && String(ref) !== "9999"
+              ? ref
+              : `${mat || "Producto"} ${largoValue ?? ""}x${anchoValue ?? ""}x${espesorValue ?? ""}`.trim();
+
+        const [insResult] = await connection.query(queryAlbaranMateriales, [
           numAlbaran,
-          ref,
+          productoIdSeguro,
           cantidadValue,
           ralValue,
           observaciones,
           refObra ?? null,
           unidad_medida ?? null,
-          Number.isNaN(precioUnitarioValue) ? 0 : precioUnitarioValue,
+          precioUnitarioValue,
           largoValue,
           anchoValue,
           espesorValue,
@@ -408,82 +433,26 @@ export default function newAlbaran(io) {
           fabricacion_manual ?? 0,
           fecha_fabricacion_manual ?? null,
           mat ?? null,
+          consumoValue
         ]);
 
-        // Solo actualizamos stock cuando se proporcionó un RAL real
-        if (ralValue && ralValue !== "Sin especificar") {
-          // Consulta el stock y el consumo
-          const [rows] = await connection.query(
-            "SELECT stock FROM pintura WHERE ral = ?",
-            [ralValue],
-          );
-          if (rows.length > 0) {
-            const stockActual = parseFloat(rows[0].stock) || 0;
+        const pedidoLineaId = insResult?.insertId;
 
-            const cantidadARestar = consumoValue * Number(cantidadValue);
-            const stockRestante = stockActual - cantidadARestar;
-
-            // Actualiza el stock aunque quede negativo
-            await connection.query(
-              "UPDATE pintura SET stock = ? WHERE ral = ?",
-              [stockRestante, ralValue],
-            );
-
-            // Si el stock es negativo, notifica al usuario
-            if (stockRestante < 0) {
-              error = `¡Atención! El stock para RAL ${ralValue} es negativo: ${stockRestante} Kg`;
-            }
-          } else {
-            const id =
-              Date.now().toString(36) + Math.random().toString(36).substring(2);
-            await connection.query(
-              "INSERT INTO pintura (id,ral, stock,marca) VALUES (?,?,?, ?)",
-              [
-                id,
-                ralValue,
-                -consumoValue * Number(cantidadValue),
-                ralInfo.marca,
-              ],
-            );
-            const acabadoLabel = ralInfo.esMate ? "Mate" : "Normal/Brillo";
-            error = `RAL ${ralValue} (${acabadoLabel}) no encontrado, se ha creado con marca ${ralInfo.marca} y stock negativo de ${
-              -consumoValue * Number(cantidadValue)
-            } Kg`;
-          }
-        }
-
-        // Segunda resta de stock para imprimación cuando aplique
-        if (tieneImprimacionValue) {
-          const [rowsImp] = await connection.query(
-            "SELECT stock FROM pintura WHERE ral = ?",
-            ["IMPRIMACION"],
-          );
-
-          const cantidadARestarImp = consumoValue * Number(cantidadValue);
-
-          if (rowsImp.length > 0) {
-            const stockImpActual = parseFloat(rowsImp[0].stock) || 0;
-            const stockImpRestante = stockImpActual - cantidadARestarImp;
-
-            await connection.query(
-              "UPDATE pintura SET stock = ? WHERE ral = ?",
-              [stockImpRestante, "IMPRIMACION"],
-            );
-
-            if (stockImpRestante < 0) {
-              error = `¡Atención! El stock de IMPRIMACION es negativo: ${stockImpRestante} Kg`;
-            }
-          } else {
-            const idImp =
-              Date.now().toString(36) + Math.random().toString(36).substring(2);
-            await connection.query(
-              "INSERT INTO pintura (id,ral, stock,marca) VALUES (?,?,?, ?)",
-              [idImp, "IMPRIMACION", -cantidadARestarImp, "-"],
-            );
-            error = `IMPRIMACION no encontrada, se ha creado con un stock negativo de ${-cantidadARestarImp} Kg`;
-          }
-        }
+        // Registrar stock y movimientos usando el helper unificado
+        await aplicarStockPintura(
+          numAlbaran,
+          pedidoLineaId,
+          {
+            ral: ralValue,
+            consumo: consumoValue,
+            cantidad: cantidadValue,
+            tiene_imprimacion: tieneImprimacionValue,
+          },
+          connection
+        );
       }
+
+
       if (firma) {
         const queryFirmas =
           "INSERT INTO Firmas (idAlbaran, firma) VALUES (?, ?)";
@@ -560,7 +529,13 @@ export default function newAlbaran(io) {
           material?.cantidad ?? material?.unid ?? 1,
           1,
         ),
-        consumoLineaKg: toDecimal(material?.consumo, 0),
+        consumoLineaKg: calcularConsumoPintura({
+          unidad_medida: material?.unidad_medida,
+          largo: toNullableDecimal(material?.largo ?? material?.longitud),
+          ancho: toNullableDecimal(material?.ancho),
+          espesor: toNullableDecimal(material?.espesor) ?? 1,
+          consumoManual: material?.consumo,
+        }),
         ralValue,
         tieneImprimacionValue: isTruthy(material?.tiene_imprimacion),
         fabricacionManualValue: isTruthy(material?.fabricacion_manual),
@@ -711,60 +686,18 @@ export default function newAlbaran(io) {
 
         const pedidoLineaId = lineInsertResult?.insertId || null;
 
-        for (const deduction of line.deductions) {
-          const pintura = await getOrCreatePaintByRal(
-            deduction.ralKey,
-            deduction.marca,
-          );
-
-          const qty = toDecimal(deduction.cantidadKg, 0);
-          if (qty <= 0) continue;
-
-          const cacheStock = currentStockByPaintId.get(pintura.id);
-          const stockPrev =
-            cacheStock === undefined
-              ? toDecimal(pintura.stockActual, 0)
-              : toDecimal(cacheStock, 0);
-          const stockNext = stockPrev - qty;
-
-          const costInfo = await consumeFifoCost(
-            connection,
-            pintura.id,
-            qty,
-            fifoEnabled,
-          );
-
-          await connection.query("UPDATE pintura SET stock = ? WHERE id = ?", [
-            stockNext,
-            pintura.id,
-          ]);
-          currentStockByPaintId.set(pintura.id, stockNext);
-
-          if (movimientosEnabled) {
-            await connection.query(
-              `
-              INSERT INTO pintura_stock_movimientos
-              (pedido_id, pedido_linea_id, pintura_id, ral_snapshot, tipo, cantidad_kg,
-               stock_anterior_kg, stock_nuevo_kg, coste_unitario_eur_kg, coste_total_eur,
-               origen, observaciones, usuario)
-              VALUES (?, ?, ?, ?, 'SALIDA', ?, ?, ?, ?, ?, 'pedido_transaccional', ?, ?)
-              `,
-              [
-                numAlbaran,
-                pedidoLineaId,
-                pintura.id,
-                pintura.ral,
-                qty,
-                stockPrev,
-                stockNext,
-                costInfo.costeUnitario,
-                costInfo.costeTotal,
-                deduction.tipo,
-                null,
-              ],
-            );
-          }
-        }
+        // Registrar stock y movimientos usando el helper unificado
+        await aplicarStockPintura(
+          numAlbaran,
+          pedidoLineaId,
+          {
+            ral: line.ralValue,
+            consumo: line.consumoLineaKg,
+            cantidad: line.cantidadValue,
+            tiene_imprimacion: line.tieneImprimacionValue,
+          },
+          connection
+        );
       }
 
       if (firma) {
