@@ -33,4 +33,4 @@ COM2
 *.sw?
 .env
 .sql
-/database
+database
