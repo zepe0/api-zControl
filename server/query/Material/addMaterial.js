@@ -8,7 +8,7 @@ const addMaterial = (io) => {
   router.post("/add", async (req, res) => {
     const id = randomUUID();
     const query =
-      "INSERT INTO productos (id,nombre, uni, precio, refObra, consumo) VALUES (?,?, ?, ?, ?, ?)";
+      "INSERT INTO productos (id,nombre, uni, precio,  consumo) VALUES (?,?,  ?, ?, ?)";
     const { nombre, stock, precio, obra, consumo } = req.body;
     try {
       const [resultado] = await conexion.query(query, [
@@ -16,12 +16,12 @@ const addMaterial = (io) => {
         nombre,
         stock,
         precio,
-        obra,
+      
         consumo,
       ]);
 
       if (resultado.affectedRows > 0) {
-        io.emit("materialAñadido", { nombre, stock, precio, obra, consumo });
+        io.emit("materialAñadido", { nombre, stock, precio,  consumo });
         res.status(200).json({ message: "Material añadido correctamente" });
       }
       res.status(400).json({ error: "No se pudo añadir el material" });

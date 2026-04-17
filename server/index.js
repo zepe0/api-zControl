@@ -1,3 +1,5 @@
+import deleteAlbaran from "./query/Albaranes/deleteAlbaran.js";
+
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -34,6 +36,14 @@ import editLinia from "./query/Pedidos/editLinia.js";
 import tarifasRouter from "./routes/tarifas.js";
 import analyticsRouter from "./routes/analytics.js";
 import updateAlbaran from "./query/Albaranes/UpdateAlbaran.js";
+
+// Verifica pinturas especiales y producto 'Sin Especificar' al arrancar
+import { ensurePinturasSistema } from "../scripts/ensure-pinturas-sistema.mjs";
+import { ensureProductoSinEspecificar } from "../scripts/ensure-producto-sin-especificar.mjs";
+
+// Ejecutar verificaciones antes de arrancar el servidor
+await ensurePinturasSistema();
+await ensureProductoSinEspecificar();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -72,6 +82,7 @@ app.use("/api/albaran", newAlbaran(io));
 app.use("/api/albaran", getAlbaran);
 app.use("/api/albaranvalor", getAlbaranValor);
 app.use("/api/albaranes", editAlbaran(io));
+app.use("/api/albaran", deleteAlbaran);
 
 app.use("/api/materiales", addMaterial(io));
 app.use("/api/materiales", getMaterial);

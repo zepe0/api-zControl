@@ -22,13 +22,13 @@ const updateAlbaran = (io) => {
         estado,
         pedido_id,
       ]);
-     
+
       // 2. Detectar líneas borradas
       const [lineasDB] = await connection.query(
         "SELECT id FROM pedido_lineas WHERE pedido_id = ?",
         [pedido_id],
       );
-    
+
       const idsEnPayload = albaran
         .map((l) => l.lineId)
         .filter((id) => id != null);
@@ -52,20 +52,36 @@ const updateAlbaran = (io) => {
         if (!linea.lineId) {
           // INSERTAR NUEVA (Incluimos ref_obra en la columna correspondiente)
           const [ins] = await connection.query(
-            `INSERT INTO pedido_lineas (pedido_id, producto_id, cantidad, ral, consumo_pintura_kg, precio_unitario, largo, ancho, espesor, nombre_snapshot, ref_obra) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO pedido_lineas (
+      pedido_id, 
+      producto_id, 
+      cantidad, 
+      ral, 
+      consumo_pintura_kg, 
+      precio_unitario, 
+      largo, 
+      ancho, 
+      espesor, 
+      nombre_snapshot, 
+      refObra
+    ) 
+    VALUES (
+      ?, 
+      (SELECT id FROM productos WHERE nombre = ? LIMIT 1), 
+      ?, ?, ?, ?, ?, ?, ?, ?, ?
+    )`,
             [
               pedido_id,
-              linea.idMaterial,
+              linea.mat,
               linea.cantidad,
               linea.ral,
               linea.consumo,
               linea.precio_unitario,
-              linea.largo,
-              linea.ancho,
+              linea.largo ? linea.largo : "00.00",
+              linea.ancho ? linea.ancho : "00.00",
               linea.espesor,
               linea.mat,
-              refObraLinea, // <--- Dato de la línea
+              refObraLinea,
             ],
           );
           await aplicarStockPintura(pedido_id, ins.insertId, linea, connection);
@@ -94,7 +110,7 @@ const updateAlbaran = (io) => {
             if (ralCambiado) {
               await revertirStockPintura(linea.lineId, connection);
             }
-            debugger
+            debugger;
             await connection.query(
               `UPDATE pedido_lineas SET 
                 producto_id=?, cantidad=?, ral=?, consumo_pintura_kg=?, 

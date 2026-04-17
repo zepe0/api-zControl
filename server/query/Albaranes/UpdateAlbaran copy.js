@@ -22,7 +22,7 @@ const updateAlbaran = (io) => {
         estado,
         pedido_id,
       ]);
-      debugger;
+      
       // 2. Detectar líneas borradas
       const [lineasDB] = await connection.query(
         "SELECT id FROM pedido_lineas WHERE pedido_id = ?",
@@ -38,7 +38,7 @@ const updateAlbaran = (io) => {
         .map((row) => row.id);
 
       for (const idBorrar of idsABorrar) {
-        await revertirStockPintura(idBorrar, connection);
+       /*  await revertirStockPintura(idBorrar, connection); */
         await connection.query("DELETE FROM pedido_lineas WHERE id = ?", [
           idBorrar,
         ]);

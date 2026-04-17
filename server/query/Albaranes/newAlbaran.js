@@ -29,7 +29,6 @@ export default function newAlbaran(io) {
         .replace(/\bIMP(?:RIMACION)?\b/gi, " ")
         .replace(/\s+/g, " ")
         .trim();
-
       return {
         ralCodigo: "IMPRIMACION",
         esMate: false,
@@ -93,6 +92,7 @@ export default function newAlbaran(io) {
     const ralCodigo = ralBase
       ? `${ralBase}${acabado ? ` ${acabado}` : ""}`
       : "";
+
     const marcaLimpia = marcaTokens.join(" ").trim();
 
     return {
@@ -103,8 +103,9 @@ export default function newAlbaran(io) {
       esNoir: false,
       marca: marcaLimpia || "Genérica",
     };
-  };
+  } // <- cierre correcto de normalizarRalInfo
 
+  // --- Funciones utilitarias fuera de normalizarRalInfo ---
   const toDecimal = (value, defaultValue = 0) => {
     if (value === null || value === undefined || value === "") {
       return defaultValue;
@@ -508,6 +509,7 @@ export default function newAlbaran(io) {
   });
 
   router.post("/add-transaccional", async (req, res) => {
+
     const {
       numAlbaran,
       cliente,
@@ -520,7 +522,7 @@ export default function newAlbaran(io) {
       observaciones,
       estado,
     } = req.body || {};
-
+    const nifValue = Nif ?? nif ?? null;
     if (
       !numAlbaran ||
       !cliente ||
@@ -533,9 +535,42 @@ export default function newAlbaran(io) {
       });
     }
 
-    const nifValue = Nif ?? nif ?? null;
-    let connection;
+    // Poblar lineData antes del try
+    const lineData = albaran.map(material => {
+      const rawRal = material?.Ral || material?.ral || "Sin especificar";
+      const ralInfo = normalizarRalInfo(rawRal);
+      const ralValue = ralInfo.ralCodigo || String(rawRal || "").trim() || "Sin especificar";
+      return {
+        ref: material?.idMaterial || material?.ref || "",
+        mat: material?.mat || material?.nombreMaterial || null,
+        refObra: material?.refObra ?? null,
+        unidad_medida: material?.unidad_medida ?? null,
+        precio_unitario: toDecimal(
+          material?.precio_unitario ??
+          material?.precioUnitario ??
+          material?.precio_sugerido ??
+          material?.precio ??
+          0,
+          0,
+        ),
+        largo: toNullableDecimal(material?.largo ?? material?.longitud),
+        ancho: toNullableDecimal(material?.ancho),
+        espesor: toNullableDecimal(material?.espesor) ?? 1,
+        cantidadValue: toDecimal(
+          material?.cantidad ?? material?.unid ?? 1,
+          1,
+        ),
+        consumoLineaKg: toDecimal(material?.consumo, 0),
+        ralValue,
+        tieneImprimacionValue: isTruthy(material?.tiene_imprimacion),
+        fabricacionManualValue: isTruthy(material?.fabricacion_manual),
+        fechaFabricacionManual: material?.fecha_fabricacion_manual ?? null,
+        parsedMarca: ralInfo.marca || "Genérica",
+        deductions: [],
+      };
+    });
 
+    let connection;
     try {
       connection = await conexion.getConnection();
       await connection.beginTransaction();
@@ -549,7 +584,6 @@ export default function newAlbaran(io) {
         "pintura_stock_lotes_fifo",
       );
 
-      const lineData = [];
       const paintCacheByRal = new Map();
 
       const getOrCreatePaintByRal = async (
@@ -602,71 +636,6 @@ export default function newAlbaran(io) {
         return created;
       };
 
-      for (const material of albaran) {
-        const rawRal = material?.Ral || material?.ral || "Sin especificar";
-        const ralInfo = normalizarRalInfo(rawRal);
-        const ralValue =
-          ralInfo.ralCodigo || String(rawRal || "").trim() || "Sin especificar";
-
-        const cantidadValue = toDecimal(
-          material?.cantidad ?? material?.unid ?? 1,
-          1,
-        );
-        const consumoLineaKg = toDecimal(material?.consumo, 0);
-        const tieneImprimacionValue = isTruthy(material?.tiene_imprimacion);
-        const fabricacionManualValue = isTruthy(material?.fabricacion_manual);
-
-        const line = {
-          ref: material?.idMaterial || material?.ref || "",
-          mat: material?.mat || material?.nombreMaterial || null,
-          refObra: material?.refObra ?? null,
-          unidad_medida: material?.unidad_medida ?? null,
-          precio_unitario: toDecimal(
-            material?.precio_unitario ??
-              material?.precioUnitario ??
-              material?.precio_sugerido ??
-              material?.precio ??
-              0,
-            0,
-          ),
-          largo: toNullableDecimal(material?.largo ?? material?.longitud),
-          ancho: toNullableDecimal(material?.ancho),
-          espesor: toNullableDecimal(material?.espesor) ?? 1,
-          cantidadValue,
-          consumoLineaKg,
-          ralValue,
-          tieneImprimacionValue,
-          fabricacionManualValue,
-          fechaFabricacionManual: material?.fecha_fabricacion_manual ?? null,
-          parsedMarca: ralInfo.marca || "Genérica",
-          deductions: [],
-        };
-
-        if (!line.fabricacionManualValue) {
-          if (!isWildcardRal(line.ralValue) && line.consumoLineaKg > 0) {
-            const ralKey = String(line.ralValue).trim().toUpperCase();
-            line.deductions.push({
-              ralKey,
-              cantidadKg: line.consumoLineaKg,
-              tipo: "COLOR",
-              marca: line.parsedMarca,
-            });
-          }
-
-          if (line.tieneImprimacionValue && line.consumoLineaKg > 0) {
-            const impKey = "IMPRIMACION";
-            line.deductions.push({
-              ralKey: impKey,
-              cantidadKg: line.consumoLineaKg,
-              tipo: "IMPRIMACION",
-              marca: "-",
-            });
-          }
-        }
-
-        lineData.push(line);
-      }
-
       let clienteId;
       const [clienteRows] = await connection.query(
         "SELECT id FROM cliente WHERE nombre = ? AND Nif = ?",
@@ -701,23 +670,28 @@ export default function newAlbaran(io) {
         "INSERT INTO productos (id, nombre, uni) VALUES (?, ?, ?)";
 
       const queryInsertLinea =
-        "INSERT INTO pedido_lineas (pedido_id, producto_id, cantidad, ral, observaciones, refObra, unidad_medida, precio_unitario, largo, ancho, espesor, tiene_imprimacion, fabricacion_manual, fecha_fabricacion_manual, nombre_snapshot, consumo_imprimacion) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        "INSERT INTO pedido_lineas (pedido_id, producto_id, cantidad, ral, observaciones, refObra, unidad_medida, precio_unitario, largo, ancho, espesor, tiene_imprimacion, fabricacion_manual, fecha_fabricacion_manual, nombre_snapshot, consumo_imprimacion,consumo_pintura_kg) VALUES (?,?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
       for (const line of lineData) {
-        const [rowsMaterial] = await connection.query(queryCheckMateriales, [
-          line.ref,
-        ]);
-        if (rowsMaterial.length === 0 && line.ref) {
+        // Generar productoIdSeguro
+        const productoIdSeguro =
+          line.ref && String(line.ref).trim() !== ""
+            ? line.ref
+            : `${line.mat || "Producto"} ${line.largo ?? ""}x${line.ancho ?? ""}x${line.espesor ?? ""}`.trim();
+
+        // Asegurar que el producto existe en productos
+        const [rowsProd] = await connection.query(queryCheckMateriales, [productoIdSeguro]);
+        if (rowsProd.length === 0) {
           await connection.query(queryInsertMateriales, [
-            line.ref,
-            line.mat || line.ref,
+            productoIdSeguro,
+            line.mat || productoIdSeguro,
             line.cantidadValue || 1,
           ]);
         }
 
         const [lineInsertResult] = await connection.query(queryInsertLinea, [
           numAlbaran,
-          line.ref || "",
+          productoIdSeguro,
           line.cantidadValue,
           line.ralValue || "Sin especificar",
           observaciones || null,
@@ -732,6 +706,7 @@ export default function newAlbaran(io) {
           line.fechaFabricacionManual,
           line.mat,
           line.tieneImprimacionValue ? line.consumoLineaKg : 0,
+          line.consumo ? line.consumoPinturaKg : 0,
         ]);
 
         const pedidoLineaId = lineInsertResult?.insertId || null;
